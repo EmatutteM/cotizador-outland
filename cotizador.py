@@ -256,7 +256,7 @@ if st.button("🧮 Calcular Cotización Outland"):
         m3.metric("Unidades W/M", f"{unidades_facturables:.3f}")
         m4.metric("💰 Costo Flete", f"${costo_total:,.2f} USD")
     else:
-        peso_volumetrico_kg = m3_total * 166.667
+        peso_volumetrico_kg = m3_total * 167
         peso_tasable_kg = max(peso_bruto_kg, peso_volumetrico_kg)
         costo_total = peso_tasable_kg * tarifa
         
