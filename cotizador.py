@@ -164,29 +164,52 @@ else:
     with col_p1:
         unidad_medida = st.selectbox("Unidad de dimensión para la tabla:", list(factores_medida.keys()), index=0)
     with col_p2:
+        tipo_peso_list = st.radio("¿Cómo ingresarás el peso?", ["Peso Bruto Total del Embarque", "Peso Individual por Bulto (en la tabla)"], horizontal=True)
+
+    col_p3, col_p4 = st.columns(2)
+    with col_p3:
+        if tipo_peso_list == "Peso Bruto Total del Embarque":
+            peso_bruto_list_kg = st.number_input("Peso Bruto Total del Embarque (kg)", min_value=0.0, value=180.0, step=5.0)
+        else:
+            st.info("💡 Ingresa el peso unitario directamente en la última columna de la tabla.")
+            peso_bruto_list_kg = 0.0
+    with col_p4:
         tarifa_label = "Tarifa Flete (USD por m³ / W/M)" if tipo_transporte == "Marítimo LCL" else "Tarifa Flete (USD por kg cargable)"
         val_default = 85.0 if tipo_transporte == "Marítimo LCL" else 4.5
         tarifa = st.number_input(tarifa_label, min_value=0.0, value=val_default, step=0.5)
 
-    st.caption("✍️ Edita las celdas directamente o presiona el botón '+' abajo para agregar más tipos de bultos:")
+    st.caption("✍️ Edita las celdas directamente o presiona '+' abajo para sumar más tipos de bultos:")
     
-    # Tabla editable de bultos
-    df_inicial = pd.DataFrame([
-        {"Cant. Bultos": 1, "Largo": 120.0, "Ancho": 80.0, "Alto": 100.0, "Peso Unitario (kg)": 150.0},
-        {"Cant. Bultos": 2, "Largo": 50.0, "Ancho": 40.0, "Alto": 30.0, "Peso Unitario (kg)": 15.0}
-    ])
-    
-    df_edited = st.data_editor(
-        df_inicial, 
-        num_rows="dynamic", 
-        use_container_width=True,
-        column_config={
+    # Configuración según selección de peso
+    if tipo_peso_list == "Peso Bruto Total del Embarque":
+        df_inicial = pd.DataFrame([
+            {"Cant. Bultos": 1, "Largo": 120.0, "Ancho": 80.0, "Alto": 100.0},
+            {"Cant. Bultos": 2, "Largo": 50.0, "Ancho": 40.0, "Alto": 30.0}
+        ])
+        config_cols = {
+            "Cant. Bultos": st.column_config.NumberColumn(min_value=1, step=1, default=1),
+            "Largo": st.column_config.NumberColumn(min_value=0.0, step=1.0),
+            "Ancho": st.column_config.NumberColumn(min_value=0.0, step=1.0),
+            "Alto": st.column_config.NumberColumn(min_value=0.0, step=1.0),
+        }
+    else:
+        df_inicial = pd.DataFrame([
+            {"Cant. Bultos": 1, "Largo": 120.0, "Ancho": 80.0, "Alto": 100.0, "Peso Unitario (kg)": 150.0},
+            {"Cant. Bultos": 2, "Largo": 50.0, "Ancho": 40.0, "Alto": 30.0, "Peso Unitario (kg)": 15.0}
+        ])
+        config_cols = {
             "Cant. Bultos": st.column_config.NumberColumn(min_value=1, step=1, default=1),
             "Largo": st.column_config.NumberColumn(min_value=0.0, step=1.0),
             "Ancho": st.column_config.NumberColumn(min_value=0.0, step=1.0),
             "Alto": st.column_config.NumberColumn(min_value=0.0, step=1.0),
             "Peso Unitario (kg)": st.column_config.NumberColumn(min_value=0.0, step=1.0),
         }
+
+    df_edited = st.data_editor(
+        df_inicial, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        column_config=config_cols
     )
 
 # --- CÁLCULO GENERAL ---
@@ -205,18 +228,20 @@ if st.button("🧮 Calcular Cotización Outland"):
     else: # Múltiples bultos
         f_medida = factores_medida[unidad_medida]
         m3_total = 0.0
-        peso_bruto_kg = 0.0
+        peso_bruto_kg = 0.0 if tipo_peso_list != "Peso Bruto Total del Embarque" else peso_bruto_list_kg
         
         for idx, row in df_edited.iterrows():
             cant = row["Cant. Bultos"]
             l_m = row["Largo"] * f_medida
             a_m = row["Ancho"] * f_medida
             h_m = row["Alto"] * f_medida
-            peso_u = row["Peso Unitario (kg)"]
             
             vol_unit = l_m * a_m * h_m
             m3_total += (vol_unit * cant)
-            peso_bruto_kg += (peso_u * cant)
+            
+            if tipo_peso_list != "Peso Bruto Total del Embarque":
+                peso_u = row.get("Peso Unitario (kg)", 0.0)
+                peso_bruto_kg += (peso_u * cant)
 
     # Resultados según transporte
     if tipo_transporte == "Marítimo LCL":
