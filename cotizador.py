@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import os
 
 # Configuración de página
@@ -95,48 +96,129 @@ st.markdown("---")
 # Menú lateral
 st.sidebar.header("⚙️ Configuración del Envío")
 tipo_transporte = st.sidebar.radio("Tipo de Transporte:", ["Marítimo LCL", "Aéreo"])
-unidad_medida = st.sidebar.selectbox("Unidad de dimensión:", ["Milímetros (mm)", "Centímetros (cm)", "Metros (m)", "Pulgadas (in)"])
-unidad_peso = st.sidebar.selectbox("Unidad de peso:", ["Kilogramos (kg)", "Libras (lb)"])
 
-# Formulario de Carga
-st.subheader("📏 Dimensiones y Peso de la Carga")
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    largo = st.number_input("Largo", min_value=0.0, value=100.0 if "m" not in unidad_medida else 1.0, step=1.0)
-with col2:
-    ancho = st.number_input("Ancho", min_value=0.0, value=100.0 if "m" not in unidad_medida else 1.0, step=1.0)
-with col3:
-    alto = st.number_input("Alto", min_value=0.0, value=100.0 if "m" not in unidad_medida else 1.0, step=1.0)
-with col4:
-    bultos = st.number_input("Cantidad de bultos", min_value=1, value=1, step=1)
+modo_ingreso = st.sidebar.radio(
+    "Modo de ingreso de carga:", 
+    [
+        "Por totales directos (m³ y kg)", 
+        "Bulto único / uniformes", 
+        "Múltiples bultos (Packing List)"
+    ]
+)
 
-col5, col6 = st.columns(2)
-with col5:
-    peso_input = st.number_input(f"Peso Bruto Total ({unidad_peso.split()[-1]})", min_value=0.0, value=150.0 if "kg" in unidad_peso else 330.0, step=5.0)
-with col6:
-    if tipo_transporte == "Marítimo LCL":
-        tarifa = st.number_input("Tarifa Flete (USD por m³ / W/M)", min_value=0.0, value=85.0, step=5.0)
-    else:
-        tarifa = st.number_input("Tarifa Flete (USD por kg cargable)", min_value=0.0, value=4.5, step=0.5)
+# Factores de conversión de dimensiones a Metros
+factores_medida = {
+    "Centímetros (cm)": 0.01,
+    "Milímetros (mm)": 0.001,
+    "Metros (m)": 1.0,
+    "Pulgadas (in)": 0.0254
+}
 
-# Cálculo al presionar el botón
+# Inicialización de variables generales
+m3_total = 0.0
+peso_bruto_kg = 0.0
+
+st.subheader("📏 Datos de la Carga")
+
+# --- MODO 1: TOTALES DIRECTOS ---
+if modo_ingreso == "Por totales directos (m³ y kg)":
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        m3_directos = st.number_input("Volumen Total (m³)", min_value=0.0, value=1.2, step=0.1)
+    with col2:
+        peso_directo_kg = st.number_input("Peso Bruto Total (kg)", min_value=0.0, value=1000.0, step=10.0)
+    with col3:
+        tarifa_label = "Tarifa Flete (USD por m³ / W/M)" if tipo_transporte == "Marítimo LCL" else "Tarifa Flete (USD por kg cargable)"
+        val_default = 85.0 if tipo_transporte == "Marítimo LCL" else 4.5
+        tarifa = st.number_input(tarifa_label, min_value=0.0, value=val_default, step=0.5)
+
+# --- MODO 2: BULTO ÚNICO / UNIFORMES ---
+elif modo_ingreso == "Bulto único / uniformes":
+    col_u1, col_u2 = st.columns(2)
+    with col_u1:
+        unidad_medida = st.selectbox("Unidad de dimensión:", list(factores_medida.keys()), index=0)
+    with col_u2:
+        unidad_peso = st.selectbox("Unidad de peso:", ["Kilogramos (kg)", "Libras (lb)"])
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        largo = st.number_input("Largo", min_value=0.0, value=100.0, step=1.0)
+    with col2:
+        ancho = st.number_input("Ancho", min_value=0.0, value=100.0, step=1.0)
+    with col3:
+        alto = st.number_input("Alto", min_value=0.0, value=100.0, step=1.0)
+    with col4:
+        bultos = st.number_input("Cantidad de bultos", min_value=1, value=1, step=1)
+
+    col5, col6 = st.columns(2)
+    with col5:
+        peso_input = st.number_input(f"Peso Bruto Total ({unidad_peso.split()[-1]})", min_value=0.0, value=150.0, step=5.0)
+    with col6:
+        tarifa_label = "Tarifa Flete (USD por m³ / W/M)" if tipo_transporte == "Marítimo LCL" else "Tarifa Flete (USD por kg cargable)"
+        val_default = 85.0 if tipo_transporte == "Marítimo LCL" else 4.5
+        tarifa = st.number_input(tarifa_label, min_value=0.0, value=val_default, step=0.5)
+
+# --- MODO 3: MÚLTIPLES BULTOS (PACKING LIST) ---
+else:
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        unidad_medida = st.selectbox("Unidad de dimensión para la tabla:", list(factores_medida.keys()), index=0)
+    with col_p2:
+        tarifa_label = "Tarifa Flete (USD por m³ / W/M)" if tipo_transporte == "Marítimo LCL" else "Tarifa Flete (USD por kg cargable)"
+        val_default = 85.0 if tipo_transporte == "Marítimo LCL" else 4.5
+        tarifa = st.number_input(tarifa_label, min_value=0.0, value=val_default, step=0.5)
+
+    st.caption("✍️ Edita las celdas directamente o presiona el botón '+' abajo para agregar más tipos de bultos:")
+    
+    # Tabla editable de bultos
+    df_inicial = pd.DataFrame([
+        {"Cant. Bultos": 1, "Largo": 120.0, "Ancho": 80.0, "Alto": 100.0, "Peso Unitario (kg)": 150.0},
+        {"Cant. Bultos": 2, "Largo": 50.0, "Ancho": 40.0, "Alto": 30.0, "Peso Unitario (kg)": 15.0}
+    ])
+    
+    df_edited = st.data_editor(
+        df_inicial, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        column_config={
+            "Cant. Bultos": st.column_config.NumberColumn(min_value=1, step=1, default=1),
+            "Largo": st.column_config.NumberColumn(min_value=0.0, step=1.0),
+            "Ancho": st.column_config.NumberColumn(min_value=0.0, step=1.0),
+            "Alto": st.column_config.NumberColumn(min_value=0.0, step=1.0),
+            "Peso Unitario (kg)": st.column_config.NumberColumn(min_value=0.0, step=1.0),
+        }
+    )
+
+# --- CÁLCULO GENERAL ---
 if st.button("🧮 Calcular Cotización Outland"):
-    # Conversión a metros
-    if "Milímetros" in unidad_medida:
-        l, a, h = largo / 1000.0, ancho / 1000.0, alto / 1000.0
-    elif "Centímetros" in unidad_medida:
-        l, a, h = largo / 100.0, ancho / 100.0, alto / 100.0
-    elif "Metros" in unidad_medida:
-        l, a, h = largo, ancho, alto
-    else:  # Pulgadas
-        l, a, h = largo * 0.0254, ancho * 0.0254, alto * 0.0254
     
-    # Conversión a Kilogramos
-    peso_bruto_kg = peso_input if "Kilogramos" in unidad_peso else peso_input * 0.453592
-    
-    m3_unitario = l * a * h
-    m3_total = m3_unitario * bultos
-    
+    if modo_ingreso == "Por totales directos (m³ y kg)":
+        m3_total = m3_directos
+        peso_bruto_kg = peso_directo_kg
+
+    elif modo_ingreso == "Bulto único / uniformes":
+        f_medida = factores_medida[unidad_medida]
+        l_m, a_m, h_m = largo * f_medida, ancho * f_medida, alto * f_medida
+        m3_total = (l_m * a_m * h_m) * bultos
+        peso_bruto_kg = peso_input if "Kilogramos" in unidad_peso else peso_input * 0.453592
+
+    else: # Múltiples bultos
+        f_medida = factores_medida[unidad_medida]
+        m3_total = 0.0
+        peso_bruto_kg = 0.0
+        
+        for idx, row in df_edited.iterrows():
+            cant = row["Cant. Bultos"]
+            l_m = row["Largo"] * f_medida
+            a_m = row["Ancho"] * f_medida
+            h_m = row["Alto"] * f_medida
+            peso_u = row["Peso Unitario (kg)"]
+            
+            vol_unit = l_m * a_m * h_m
+            m3_total += (vol_unit * cant)
+            peso_bruto_kg += (peso_u * cant)
+
+    # Resultados según transporte
     if tipo_transporte == "Marítimo LCL":
         peso_ton = peso_bruto_kg / 1000.0
         unidades_facturables = max(m3_total, peso_ton)
@@ -145,7 +227,7 @@ if st.button("🧮 Calcular Cotización Outland"):
         st.success("### 📊 Resumen de Cotización - Marítimo LCL")
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Volumen Total", f"{m3_total:.3f} m³")
-        m2.metric("Peso Bruto", f"{peso_bruto_kg:.1f} kg")
+        m2.metric("Peso Bruto Total", f"{peso_bruto_kg:.1f} kg")
         m3.metric("Unidades W/M", f"{unidades_facturables:.3f}")
         m4.metric("💰 Costo Flete", f"${costo_total:,.2f} USD")
     else:
